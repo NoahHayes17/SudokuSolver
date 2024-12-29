@@ -1,24 +1,24 @@
 """
 
-Total Run time (seconds) 
-Very Easy: 0.0486
-Easy:      0.0317
-Medium:    0.1218
-Hard:      72.024
-Overall:   1080.6
+Total Run time per category of sudoku (seconds) 
+Very Easy: 0.0447
+Easy:      0.0338
+Medium:    0.1036
+Hard:      20.215
+Overall:   20.397
 
-Average Run time (seconds)
-Very Easy: 0.0032
-Easy:      0.0021
-Medium:    0.0081
-Hard:      72.024
+Average Run Time Per Category of sudoku (seconds)
+Very Easy: 0.0030
+Easy:      0.0023
+Medium:    0.0069
+Hard:      1.3477
 
 """
 
 
+import numpy as np
 from collections import defaultdict
 from copy import deepcopy
-import numpy as np
 
 class Sudoku:
     def __init__(self, board: np.ndarray):
@@ -33,6 +33,7 @@ class Sudoku:
                 if self.board[i, j] != 0:
                     num = self.board[i, j]
                     self.possible_moves[i, j].clear()
+                    # Eliminate the number from the corresponding row, column, and block
                     for k in range(9):
                         self.possible_moves[i, k].discard(num)
                         self.possible_moves[k, j].discard(num)
@@ -41,24 +42,72 @@ class Sudoku:
                         for y in range(block_y, block_y + 3):
                             self.possible_moves[x, y].discard(num)
 
+    def find_most_constrained_cell(self) -> tuple:
+        """Find the cell with the least number of possible values."""
+        min_possibilities = float('inf')
+        most_constrained_cell = None
+        for i in range(9):
+            for j in range(9):
+                if self.board[i, j] == 0:
+                    num_possibilities = len(self.possible_moves[i, j])
+                    if 0 < num_possibilities < min_possibilities:
+                        min_possibilities = num_possibilities
+                        most_constrained_cell = (i, j)
+        return most_constrained_cell
+        
+    def least_constraining_value(self, i: int, j: int) -> list[int]: 
+        """Find the values for a cell sorted by least constraining (that value affects the least amount of cells)."""
+        if self.board[i, j] != 0:
+            return []
+
+        possible_values = list(self.possible_moves[i, j])
+        value_scores = {}
+        
+        for val in possible_values:
+            affected_cells = set()
+            # Find cells that would be affected by placing val here
+            for row in range(9):
+                if val in self.possible_moves[row, j]:
+                    affected_cells.add((row, j))
+            for col in range(9):
+                if val in self.possible_moves[i, col]:
+                    affected_cells.add((i, col))
+            block_x, block_y = 3 * (i // 3), 3 * (j // 3)
+            for x in range(block_x, block_x + 3):
+                for y in range(block_y, block_y + 3):
+                    if val in self.possible_moves[x, y]:
+                        affected_cells.add((x, y))
+
+            # Score: how many values would be removed from other cells if val is chosen
+            value_scores[val] = len(affected_cells)
+
+        # Return the values sorted by the least constraining value (the least affected cells)
+        sorted_values = sorted(value_scores, key=value_scores.get)
+        return sorted_values
+        
     def solve(self) -> bool:
-        """Attempt to solve the sudoku."""
+        """"Attempt to solve the sudoku."""
         if self.is_solved():
             return True
         
-        for i in range(9):
-            for j in range(9):
-                if self.board[i, j] == 0: 
-                    for val in self.possible_moves[i, j]:
-                        temp_board = deepcopy(self)
-                        temp_board.board[i, j] = val
-                        temp_board.update_possible_moves()
-                        if temp_board.is_valid_sudoku() and \
-                           temp_board.solve() and \
-                           all(len(temp_board.possible_moves[x, y]) > 0 for x in range(9) for y in range(9) if temp_board.board[x, y] == 0):
-                            self.board = temp_board.board
-                            return True
-                    return False  # Backtrack if no valid move found.
+        cell = self.find_most_constrained_cell()
+        if not cell:  # No empty cells left
+            return False
+        
+        i, j = cell
+        values_to_try = self.least_constraining_value(i, j)
+    
+        for val in values_to_try:
+            temp_board = deepcopy(self)
+            temp_board.board[i, j] = val
+            temp_board.update_possible_moves()
+    
+            # Perform forward checking: If any affected cell has no possible moves, backtrack
+            if all(len(temp_board.possible_moves[x, y]) > 0 for x in range(9) for y in range(9) if temp_board.board[x, y] == 0):
+                if temp_board.solve():
+                    self.board = temp_board.board
+                    return True
+    
         return False
 
     def is_filled(self) -> bool:
@@ -104,4 +153,4 @@ def sudoku_solver(board: np.ndarray) -> np.ndarray:
     sudoku = Sudoku(board)
     if sudoku.solve():
         return sudoku.board
-    return np.array([[-1 for _ in range(9)] for _ in range(9)])
+    return np.full((9, 9), -1)
