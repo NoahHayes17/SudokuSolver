@@ -1,95 +1,92 @@
 """
 
 Total Run time (seconds) 
-Very Easy: 0.0446
-Easy:      0.0329
-Medium:    0.1001
-Hard:      15.791
-Overall:   15.969
+Overall:   0.4701
+Very Easy: 0.0037
+Easy:      0.0026
+Medium:    0.0062
+Hard:      0.4575
 
 Average Run time (seconds)
-Very Easy: 0.0030
-Easy:      0.0022
-Medium:    0.0067
-Hard:      1.0527
+Very Easy: 0.0002
+Easy:      0.0002
+Medium:    0.0004
+Hard:      0.0305
 
 """
 
-
 import numpy as np
 from collections import defaultdict
-from copy import deepcopy
+from typing import Dict, Set, Tuple
+
 
 class Sudoku:
-    def __init__(self, board: np.ndarray):
-        self.board = board
-        self.possible_moves = np.array([[set(range(1, 10)) if board[i, j] == 0 else set() for j in range(9)] for i in range(9)])
-        self.update_possible_moves()
+    def __init__(self, board: np.ndarray) -> None:
+        """Initialize Sudoku solver with a board.
+        
+        Args:
+            board: 9x9 numpy array representing the Sudoku puzzle
+        """
+        self.board = board.copy()
+        self.possible_moves = {}
+        self.initialize_possible_moves()
 
-    def update_possible_moves(self):
-        """Update possible moves for all cells based on current board state."""
+    def get_valid_moves(self, row: int, col: int) -> Set[int]:
+        """Get all valid moves for a cell.
+        
+        Args:
+            row: Row index of the cell
+            col: Column index of the cell
+            
+        Returns:
+            Set of valid values that can be placed in the cell
+        """
+        if self.board[row][col] != 0:
+            return set()
+            
+        conflicting_values = set()
+
+        for i in range(9):
+            if self.board[i][col] != 0:
+                conflicting_values.add(self.board[i][col])
+            if self.board[row][i] != 0:
+                conflicting_values.add(self.board[row][i])
+
+        box_row, box_col = 3 * (row // 3), 3 * (col // 3)
+        for i in range(box_row, box_row + 3):
+            for j in range(box_col, box_col + 3):
+                if self.board[i][j] != 0:
+                    conflicting_values.add(self.board[i][j])
+        return set(range(1, 10)) - conflicting_values
+
+    def initialize_possible_moves(self) -> None:
+        """Initialize possible moves for all empty cells."""
         for i in range(9):
             for j in range(9):
-                if self.board[i, j] != 0:
-                    num = self.board[i, j]
-                    self.possible_moves[i, j].clear()
-                    # Eliminate the number from the corresponding row, column, and block
-                    for k in range(9):
-                        self.possible_moves[i, k].discard(num)
-                        self.possible_moves[k, j].discard(num)
-                    block_x, block_y = 3 * (i // 3), 3 * (j // 3)
-                    for x in range(block_x, block_x + 3):
-                        for y in range(block_y, block_y + 3):
-                            self.possible_moves[x, y].discard(num)
+                if self.board[i][j] == 0:
+                    moves = self.get_valid_moves(i, j)
+                    if moves:
+                        self.possible_moves[(i, j)] = set(moves)
 
-    def find_most_constrained_cell(self) -> tuple:
-        """Find the cell with the least number of possible values.""" 
-        min_possibilities = float('inf')
-        most_constrained_cell = None
-        for i in range(9):
-            for j in range(9):
-                if self.board[i, j] == 0:
-                    num_possibilities = len(self.possible_moves[i, j])
-                    if 0 < num_possibilities < min_possibilities:
-                        min_possibilities = num_possibilities
-                        most_constrained_cell = (i, j)
-        return most_constrained_cell
+    def find_most_constrained_cell(self) -> tuple[int, int] | None:
+        """Find the cell with the least number of possible values.
         
-    def solve(self) -> bool:
-        """Attempt to solve the sudoku."""
-        if self.is_solved():
-            return True
+        Returns:
+            Tuple of (row, col) for the most constrained cell, or None if no moves possible
+        """
+        if not self.possible_moves:
+            return None
+        return min(self.possible_moves.items(), key=lambda x: len(x[1]))[0]
+
+    def is_valid_board(self) -> bool:
+        """Check if the current board's arrangement of numbers is valid.
         
-        cell = self.find_most_constrained_cell()
-        if not cell:  # No empty cells left
-            return False
-        
-        i, j = cell
-
-        values_to_try = self.possible_moves[i, j]
-    
-        for val in values_to_try:
-            temp_board = deepcopy(self)
-            temp_board.board[i, j] = val
-            temp_board.update_possible_moves()
-    
-            # Perform forward checking: If any affected cell has no possible moves, backtrack
-            if all(len(temp_board.possible_moves[x, y]) > 0 for x in range(9) for y in range(9) if temp_board.board[x, y] == 0):
-                if temp_board.solve():
-                    self.board = temp_board.board
-                    return True
-    
-        return False
-
-    def is_filled(self) -> bool:
-        """Check if the board is completely filled."""
-        return np.all(self.board > 0)
-
-    def is_valid_sudoku(self) -> bool:
-        """Check if the current board's arrangement of numbers is valid."""
+        Returns:
+            Boolean indicating if the current board state is valid
+        """
         cols = defaultdict(set)
         rows = defaultdict(set)
-        squares = defaultdict(set)
+        boxes = defaultdict(set)
 
         for row in range(9):
             for col in range(9):
@@ -98,30 +95,100 @@ class Sudoku:
                     continue
                 if (num in rows[row] or 
                     num in cols[col] or 
-                    num in squares[(row // 3, col // 3)]):
+                    num in boxes[(row // 3, col // 3)]):
                     return False
                 rows[row].add(num)
                 cols[col].add(num)
-                squares[(row // 3, col // 3)].add(num)
+                boxes[(row // 3, col // 3)].add(num)
         return True
+    
+    def store_state(self, row: int, col: int, affected_cells: Dict[Tuple[int, int], Set[int]]) -> None:
+        """Store current state of affected cells for backtracking.
+        
+        Args:
+            row: Row index of the current cell
+            col: Column index of the current cell
+            affected_cells: Dictionary to store the affected cells' moves
+        """
+        for i in range(9):
+            for j in range(9):
+                if (i == row or j == col or 
+                   (i//3 == row//3 and j//3 == col//3)) and (i, j) in self.possible_moves:
+                    affected_cells[(i, j)] = self.possible_moves[(i, j)].copy()
+                    
+    def forward_checking(self, affected_cells: Dict[Tuple[int, int], Set[int]], value: int) -> bool:
+        """Perform forward checking: If any affected cell has no possible moves, backtrack.
+        
+        Args:
+            affected_cells: Dictionary of cells affected by the current move
+            value: Value being placed in the current cell
+            
+        Returns:
+            Boolean indicating if the move is valid
+        """
+        valid = True
+        for pos in affected_cells:
+            if pos in self.possible_moves:
+                self.possible_moves[pos].discard(value)
+                if not self.possible_moves[pos]:
+                    valid = False
+                    break
+        return valid
 
-    def is_solved(self) -> bool:
-        """Check if the board is both filled and valid."""
-        return self.is_filled() and self.is_valid_sudoku()
+    def backtrack(self, row: int, col: int, stored_moves: Dict[Tuple[int, int], Set[int]]) -> None:
+        """Restores the previous state before an invalid move was made.
+        
+        Args:
+            row: Row index of the cell to backtrack
+            col: Column index of the cell to backtrack
+            stored_moves: Dictionary of stored moves to restore
+        """
+        self.board[row, col] = 0
+        for pos, moves in stored_moves.items():
+            if pos in self.possible_moves:
+                self.possible_moves[pos] = moves
+    
+    def solve(self) -> bool:
+        """Attempt to solve the sudoku.
+        
+        Returns:
+            Boolean indicating if a solution was found
+        """
+        if not self.possible_moves: 
+            return all(0 not in row for row in self.board)
+
+        row, col = self.find_most_constrained_cell()
+        possible_values = list(self.possible_moves[(row, col)])  
+        
+        del self.possible_moves[(row, col)]
+        
+        for value in possible_values:
+            self.board[row, col] = value
+            affected_cells_moves = {}
+            self.store_state(row, col, affected_cells_moves)
+            valid_move = self.forward_checking(affected_cells_moves, value)
+            if valid_move and self.solve():
+                return True
+            self.backtrack(row, col, affected_cells_moves)
+            
+        self.possible_moves[(row, col)] = set(possible_values)
+        return False
 
 def sudoku_solver(board: np.ndarray) -> np.ndarray:
     """
     Solves a Sudoku puzzle and returns its unique solution.
 
-    Input
+    Args
         board : 9x9 numpy array
             Empty cells are designated by 0.
 
-    Output
+    Returns
         9x9 numpy array of integers
             It contains the solution, if there is one. If there is no solution, all array entries should be -1.
     """
     sudoku = Sudoku(board)
-    if sudoku.solve():
+    if not sudoku.is_valid_board():
+        return np.full((9, 9), -1)
+    elif sudoku.solve():
         return sudoku.board
     return np.full((9, 9), -1)
